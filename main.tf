@@ -13,55 +13,20 @@ provider "aws" {
   region = "us-west-2"
 }
 
-resource "aws_vpc" "vpc" {
-  cidr_block = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = tomap({
-    Name  = var.name
-    Owner = var.owner
-  })
-}
-
-resource "aws_subnet" "public_subnet" {
-  availability_zone       = "us-west-2a"
-  cidr_block              = "10.0.0.0/24"
-  map_public_ip_on_launch = "true"
-  vpc_id                  = aws_vpc.vpc.id
-
-  tags = tomap({
-    Name  = var.name
-    Owner = var.owner
-  })
-}
-
-resource "aws_internet_gateway" "internet_gateway" {
-  vpc_id = aws_vpc.vpc.id
-
-  tags = tomap({
-    Name  = var.name
-    Owner = var.owner
-  })
-}
-
-resource "aws_default_route_table" "route_table" {
-  default_route_table_id = aws_vpc.vpc.default_route_table_id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.internet_gateway.id
-  }
-
-  tags = tomap({
-    Name  = var.name
-    Owner = var.owner
-  })
+module "vpc" {
+  source             = "terraform-aws-modules/vpc/aws"
+  name               = "${var.name}-vpc"
+  cidr               = "10.0.0.0/16"
+  azs                = ["us-west-2a"]
+  private_subnets    = ["10.0.0.0/24"]
+  public_subnets     = ["10.0.10.0/24"]
+  enable_nat_gateway = true
+  single_nat_gateway = true
 }
 
 resource "aws_security_group" "security_group" {
   name   = "${var.name}-instance-sg"
-  vpc_id = aws_vpc.vpc.id
+  vpc_id = module.vpc.vpc_id
 
   ingress {
     from_port   = 22
@@ -108,7 +73,7 @@ resource "aws_instance" "instance" {
   ami             = data.aws_ami.ubuntu.id
   instance_type   = var.instance_type
   key_name        = aws_key_pair.key.key_name
-  subnet_id       = aws_subnet.public_subnet.id
+  subnet_id       = module.vpc.public_subnets[0]
   security_groups = [aws_security_group.security_group.id]
 
   tags = tomap({
